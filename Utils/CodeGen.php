@@ -5,6 +5,7 @@ namespace Utils;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionParameter;
+use ReflectionType;
 
 /**
  * Usar essa classe apenas para scripts de codegen
@@ -80,41 +81,51 @@ abstract class CodeGen {
 	public static function getMethodParameters(ReflectionMethod $method) {
 		$parameters = [];
 		foreach ($method->getParameters() as $parameter) {
+			$type = $parameter->getType();
 			$parameters[] = [
 				"name" => $parameter->getName(),
-				"type" => "mixed", //$parameter->getType()->getName(),
+				"type" => $type instanceof ReflectionType ? $type->getName() : null,
+				"docType" => self::getParameterDocType($method, $parameter->getName()),
 				"optional" => $parameter->isOptional()
 			];
 		}
 		return $parameters;
 	}
 
-	// public static function getParameterType(ReflectionMethod $method, ReflectionParameter $parameter) {
-	// 	$docType = self::getParameterDocType($method, $parameter->getName());
-	// 	$type = $parameter->getType()->getName();
-	// }
+	public static function getParameterDocType(ReflectionMethod $method, $parameterName) {
+		$docComment = $method->getDocComment();
+		if ($docComment === false) {
+			return null;
+		}
 
-	// public static function getParameterDocType(ReflectionMethod $method, $parameterName) {
-	// 	$doc = $method->getDocComment();
-	// 	$doc = str_replace("/**", "", $doc);
-	// 	$doc = str_replace("*/", "", $doc);
-	// 	$doc = str_replace("*", "", $doc);
-	// 	$doc = str_replace("\n", "", $doc);
-	// 	$doc = str_replace("\r", "", $doc);
-	// 	$doc = str_replace("\t", "", $doc);
-	// 	$doc = str_replace(" ", "", $doc);
-	// 	$doc = explode("@param", $doc);
-	// 	foreach ($doc as $line) {
-	// 		$line = explode(" ", $line);
-	// 		if (count($line) == 2) {
-	// 			if ($line[0] == $parameterName) {
-	// 				return $line[1];
-	// 			}
-	// 		}
-	// 	}
+		$doc = str_replace(["/**", "*/", "\n", "\r", "\t"], "", $docComment);
+		$lines = explode("*", $doc);
+		foreach ($lines as $key => &$line) {
+			$line =	trim($line);
+			$isDocParam = mb_strpos($line, "@param") === 0;
+			if (!$isDocParam) {
+				continue;
+			}
 
-	// 	return null;
-	// }
+			$paramString = str_replace("@param", "", $line);
+			$parts = array_values(array_filter(explode(" ", $paramString), fn ($part) => !empty($part)));
+			if (empty($parts) || count($parts) !== 2) {
+				continue;
+			}
+
+			$paramName = str_replace("$", "", $parts[1]);
+
+			if ($paramName !== $parameterName) {
+				continue;
+			}
+
+			$paramType = $parts[0];
+
+			return $paramType;
+		}
+
+		return null;
+	}
 
 
 	/**
