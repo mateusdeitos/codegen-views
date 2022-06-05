@@ -12,9 +12,7 @@ class EcommerceView  {
 	 * dos e-commerces do usuário
 	 * @param  array<string,bool> $opcoes
 	 * @param  array<string,int>  $params
-	 * @param  int[]|string[] $plataformas
-	 * @param  bool $retornarDados
-	 * @return string|array
+	 * @return array<int,string>
 	 *         String contendo o select inteiro ou somente as opções
 	 */
 	public function obterSelectEcommerces($opcoes, $params = [], $plataformas = [], $retornarDados = false) {

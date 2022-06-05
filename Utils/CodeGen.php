@@ -69,9 +69,15 @@ abstract class CodeGen {
 				continue;
 			}
 
+			$returnType = $method->getReturnType();
+
 			$methods[] = [
 				"name" => $method->getShortName(),
-				"parameters" => self::getMethodParameters($method)
+				"parameters" => self::getMethodParameters($method),
+				"returnType" => [
+					"docType" => self::getMethodReturnType($method),
+					"type" => $returnType instanceof ReflectionType ? $returnType->getName() : null,
+				],
 			];
 		}
 
@@ -82,12 +88,18 @@ abstract class CodeGen {
 		$parameters = [];
 		foreach ($method->getParameters() as $parameter) {
 			$type = $parameter->getType();
-			$parameters[] = [
+			$data = [
 				"name" => $parameter->getName(),
 				"type" => $type instanceof ReflectionType ? $type->getName() : null,
 				"docType" => self::getParameterDocType($method, $parameter->getName()),
-				"optional" => $parameter->isOptional()
+				"optional" => $parameter->isOptional(),
 			];
+
+			if ($data["optional"]) {
+				$data["defaultValue"] = $parameter->getDefaultValue();
+			}
+
+			$parameters[] = $data;
 		}
 		return $parameters;
 	}
@@ -122,6 +134,35 @@ abstract class CodeGen {
 			$paramType = $parts[0];
 
 			return $paramType;
+		}
+
+		return null;
+	}
+
+	public static function getMethodReturnType(ReflectionMethod $method) {
+		$docComment = $method->getDocComment();
+		if ($docComment === false) {
+			return null;
+		}
+
+		$doc = str_replace(["/**", "*/", "\n", "\r", "\t"], "", $docComment);
+		$lines = explode("*", $doc);
+		foreach ($lines as $key => &$line) {
+			$line =	trim($line);
+			$isDocParam = mb_strpos($line, "@return") === 0;
+			if (!$isDocParam) {
+				continue;
+			}
+
+			$paramString = str_replace("@return", "", $line);
+			$parts = array_values(array_filter(explode(" ", $paramString), fn ($part) => !empty($part)));
+			if (empty($parts) || count($parts) !== 1) {
+				continue;
+			}
+
+			$returnType = $parts[0];
+
+			return $returnType;
 		}
 
 		return null;

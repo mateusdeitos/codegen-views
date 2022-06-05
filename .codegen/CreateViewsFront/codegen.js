@@ -19,16 +19,31 @@ const UppercaseFirstLetter = (string) => {
 	return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
-const parseParameterType = (parameter) => {
+const getTypeFromDefaultValue = (value) => {
+	if (typeof value === "string") {
+		return "string";
+	} else if (typeof value === "number") {
+		return "int";
+	} else if (typeof value === "boolean") {
+		return "bool";
+	} else if (Array.isArray(value)) {
+		return "array";
+	} else {
+		return "any";
+	}
+}
+
+const parsePhpTypeToTypescriptType = (parameter) => {
 	let type = "any";
 	if (!!parameter?.type) {
 		type = parameter.type;
 	} else if (!!parameter?.docType) {
 		type = parameter.docType;
+	} else if (parameter?.optional === true && "defaultValue" in parameter) {
+		type = getTypeFromDefaultValue(parameter.defaultValue);
 	}
 
 	const isArray = type => type.includes("[]") && type.indexOf("[") > 0;
-	const isOptional = parameter.optional === true;
 	const isTuple = type => type.includes("<") && type.includes(">") && type.includes(",") && type.indexOf("<") < type.indexOf(">");
 
 	const parseType = ({ type, key = "", value = "" }) => {
@@ -46,6 +61,8 @@ const parseParameterType = (parameter) => {
 			case "bool":
 			case "boolean":
 				return "boolean";
+			case "void":
+				return "void";
 
 			default:
 				return "any";
@@ -79,16 +96,17 @@ const parseParameterType = (parameter) => {
 
 	let parsedType = parseUnionType(type);
 
-	return [
-		isOptional ? "?" : "",
-		": ",
-		parsedType,
-	].join("");
+	return parsedType;
 }
 
 const buildParameter = (parameter) => {
-	const type = parseParameterType(parameter);
-	return `${parameter.name}${type}`;
+	const type = parsePhpTypeToTypescriptType(parameter);
+	return [
+		parameter.name,
+		parameter.optional ? "?" : "",
+		": ",
+		type,
+	].join("");
 }
 
 const buildMethodParameters = (parameters) => {
@@ -97,9 +115,18 @@ const buildMethodParameters = (parameters) => {
 		return "";
 	}
 
-	return parameters.map(parameter => {
+	return "\n\t" + parameters.map(parameter => {
 		return buildParameter(parameter);
-	}).join(", ")
+	}).join(",\n\t") + "\n"
+}
+
+const buildMethodReturnType = (returnType) => {
+	const parsedReturnType = parsePhpTypeToTypescriptType(returnType);
+	if (parsedReturnType == "any") {
+		return "unknown";
+	}
+
+	return parsedReturnType;
 }
 
 const parseViewName = name => {
@@ -117,8 +144,9 @@ const parseViewMethods = (viewPath, methods) => {
 	return methods.map(method => {
 		const parametersNames = method.parameters.map(parameter => parameter.name).join(", ");
 		const parameters = buildMethodParameters(method.parameters);
+		const returnType = buildMethodReturnType(method.returnType);
 		return `
-const ${method.name} = async function <TResponse = unknown>(${parameters}) {
+const ${method.name} = async function <TResponse = ${returnType}>(${parameters}) {
 	return xajax.call({
 		"type": 2,
 		"func": {
