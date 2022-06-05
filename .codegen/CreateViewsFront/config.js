@@ -9,6 +9,10 @@ module.exports = {
 		{
 			test: (fieldName) => fieldName.startsWith("id"),
 			fieldType: "number | string",
+		},
+		{
+			test: fieldName => fieldName === 'filtros',
+			fieldType: "Record<string, string | number | boolean | null | Record<string, any>>",
 		}
 	]
 }
