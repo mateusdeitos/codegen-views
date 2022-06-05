@@ -41,13 +41,7 @@ const buildMethodParameters = (parameters) => {
 		return "";
 	}
 
-	return "\n\t" + parameters.map(parameter => {
-		return buildParameter(parameter);
-	}).join(",\n\t") + "\n"
-}
-
-const parseViewName = name => {
-	return UppercaseFirstLetter(name);
+	return "\n\t" + parameters.map(buildParameter).join(",\n\t") + "\n"
 }
 
 const parseViewMethods = (viewPath, methods) => {
@@ -89,7 +83,7 @@ const addTemplate = (view) => {
 	template.setCustomAnswersParser(() => {
 		const parsedAnswers = [
 			"path", `assets/js/views/${view.path}.ts`,
-			"viewName", parseViewName(view.name),
+			"viewName", UppercaseFirstLetter(view.name),
 			"methods", parseViewMethods(view.path, view.methods),
 			"methodsNames", getMethodNames(view.methods),
 		];

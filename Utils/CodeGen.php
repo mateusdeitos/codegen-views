@@ -61,15 +61,9 @@ abstract class CodeGen {
 		$reflection = new \ReflectionClass(self::getClassFromFileName($file));
 		$methods = [];
 		foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-			if ($method->getShortName() == "__construct") {
-				continue;
-			}
-
 			if (mb_strpos($method->getShortName(), "_") === 0) {
 				continue;
 			}
-
-			$returnType = $method->getReturnType();
 
 			$methods[] = [
 				"name" => $method->getShortName(),
@@ -118,8 +112,9 @@ abstract class CodeGen {
 
 	/**
 	 * @param ReflectionParameter|string $parameter
+	 * @param array<string,string> $docParams
 	 */
-	public static function toTypescriptType($parameter, array $docParams = []): string {
+	public static function toTypescriptType($parameter, $docParams = []): string {
 		$type = "any";
 		if ($parameter instanceof ReflectionType) {
 			$type = $parameter->getType()->getName();
