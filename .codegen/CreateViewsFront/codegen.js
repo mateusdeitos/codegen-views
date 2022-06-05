@@ -1,6 +1,7 @@
 const { CodeGen, Template } = require("tiny-codegen");
 const { promisify } = require("util");
 const { exec } = require("child_process");
+const config = require("./config");
 
 const script = promisify(exec);
 const codegen = new CodeGen();
@@ -19,12 +20,18 @@ const UppercaseFirstLetter = (string) => {
 	return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
+const parseParameterType = (name, type) => {
+	if (type !== "any") return type;
+	const fallback = config.knownFieldsTypes.find(f => f.test(name))?.fieldType || type;
+	return fallback;
+}
+
 const buildParameter = (parameter) => {
 	return [
 		parameter.name,
 		parameter.optional ? "?" : "",
 		": ",
-		parameter.type,
+		parseParameterType(parameter.name, parameter.type),
 	].join("");
 }
 

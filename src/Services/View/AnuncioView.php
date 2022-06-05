@@ -18,9 +18,6 @@ class AnuncioView {
 	public function obterIdsAnunciosListar($filtros) {
 	}
 
-	/**
-	 * @param int $id
-	 */
 	public function obter($id, $copy = false) {
 	}
 
