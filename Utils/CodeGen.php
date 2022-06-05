@@ -74,10 +74,7 @@ abstract class CodeGen {
 			$methods[] = [
 				"name" => $method->getShortName(),
 				"parameters" => self::getMethodParameters($method),
-				"returnType" => [
-					"docType" => self::getMethodReturnType($method),
-					"type" => $returnType instanceof ReflectionType ? $returnType->getName() : null,
-				],
+				"returnType" => self::getMethodReturnType($method),
 			];
 		}
 
@@ -86,32 +83,136 @@ abstract class CodeGen {
 
 	public static function getMethodParameters(ReflectionMethod $method) {
 		$parameters = [];
+		$methodDocParams = self::getMethodDocParameters($method);
 		foreach ($method->getParameters() as $parameter) {
-			$type = $parameter->getType();
 			$data = [
 				"name" => $parameter->getName(),
-				"type" => $type instanceof ReflectionType ? $type->getName() : null,
-				"docType" => self::getParameterDocType($method, $parameter->getName()),
+				"type" => self::toTypescriptType($parameter, $methodDocParams),
 				"optional" => $parameter->isOptional(),
 			];
-
-			if ($data["optional"]) {
-				$data["defaultValue"] = $parameter->getDefaultValue();
-			}
 
 			$parameters[] = $data;
 		}
 		return $parameters;
 	}
 
-	public static function getParameterDocType(ReflectionMethod $method, $parameterName) {
+	private static function getTypeFromDefaultValue($value) {
+		if (is_bool($value)) {
+			return "bool";
+		} elseif (is_string($value)) {
+			return "string";
+		} elseif (is_null($value)) {
+			return "mixed";
+		} elseif (is_array($value)) {
+			return "array";
+		} elseif (is_numeric($value)) {
+			return "number";
+		} elseif(is_int($value)) {
+			return "number";
+		} elseif (is_float($value)) {
+			return "number";
+		} else {
+			return "mixed";
+		}
+	}
+
+	/**
+	 * @param ReflectionParameter|string $parameter
+	 */
+	public static function toTypescriptType($parameter, array $docParams = []): string {
+		$type = "any";
+		if ($parameter instanceof ReflectionType) {
+			$type = $parameter->getType()->getName();
+		} elseif (is_string($parameter)) {
+			$type = $parameter;
+		} elseif (isset($docParams[$parameter->getName()])) {
+			$type = $docParams[$parameter->getName()];
+		} elseif ($parameter->isOptional() && !is_null($parameter->getDefaultValue())) {
+			$type = self::toTypescriptType(self::getTypeFromDefaultValue($parameter->getDefaultValue()), $docParams);
+		}
+
+		$isArray = fn ($type) => mb_strpos($type, "[]") > 0;
+		$isTuple = fn ($type) => mb_strpos($type, "<") !== false && mb_strpos($type, ">") !== false && mb_strpos($type, ",") !== false && mb_strpos($type, "<") < mb_strpos($type, ">");
+
+		$parseType = function ($type, $key = "", $val = "") use (&$parseType) {
+			switch ($type) {
+				case 'array':
+				case 'object':
+					if (!empty($key) && !empty($val)) {
+						$parsedKey = $parseType($key);
+						$parsedVal = $parseType($val);
+						return "Record<" . $parsedKey . "," . $parsedVal . ">";
+					}
+
+					if (!empty($val)) {
+						$parsedVal = $parseType($val);
+						return $parsedVal . "[]";
+					}
+
+					return "Record<string, any>";
+
+				case 'string':
+				case 'void':
+					return $type;
+				case 'mixed':
+					return "any";
+				case 'int':
+				case 'float':
+					return 'number';
+				case 'bool':
+				case 'boolean':
+					return 'boolean';
+				default:
+					return "any";
+			}
+		};
+
+		$parseUnionType = function ($type) use ($isArray, $isTuple, $parseType) {
+			$types = [];
+
+			$fnGetStringBetweenStrings = function ($string, $first, $second) {
+				$firstPos = mb_strpos($string, $first);
+				$secondPos = mb_strpos($string, $second);
+				if ($firstPos === false || $secondPos === false) {
+					return "";
+				}
+				$firstPos += mb_strlen($first);
+				return mb_substr($string, $firstPos, $secondPos - $firstPos);
+			};
+
+			foreach (explode("|", $type) as $_type) {
+				if ($isArray($_type)) {
+					$types[] = $parseType("array", "", trim($_type, "[]"));
+					continue;
+				}
+
+				if ($isTuple($_type)) {
+					$key = $fnGetStringBetweenStrings($_type, "<", ",");
+					$val = $fnGetStringBetweenStrings($_type, ",", ">");
+					$types[] = $parseType("array", $key, $val);
+					continue;
+				}
+
+				$types[] = $parseType($_type);
+			}
+
+			return implode(" | ", $types);
+		};
+
+		$parsedType = $parseUnionType($type);
+
+		return $parsedType;
+	}
+
+	public static function getMethodDocParameters(ReflectionMethod $method): array {
 		$docComment = $method->getDocComment();
 		if ($docComment === false) {
-			return null;
+			return [];
 		}
 
 		$doc = str_replace(["/**", "*/", "\n", "\r", "\t"], "", $docComment);
 		$lines = explode("*", $doc);
+		$params = [];
 		foreach ($lines as $key => &$line) {
 			$line =	trim($line);
 			$isDocParam = mb_strpos($line, "@param") === 0;
@@ -126,23 +227,22 @@ abstract class CodeGen {
 			}
 
 			$paramName = str_replace("$", "", $parts[1]);
-
-			if ($paramName !== $parameterName) {
-				continue;
-			}
-
 			$paramType = $parts[0];
-
-			return $paramType;
+			$params[$paramName] = $paramType;
 		}
 
-		return null;
+		return $params;
 	}
 
 	public static function getMethodReturnType(ReflectionMethod $method) {
+		$returnType = $method->getReturnType();
+		if ($returnType instanceof ReflectionType && !empty($returnType->getName())) {
+			return self::toTypescriptType($returnType->getName());
+		}
+
 		$docComment = $method->getDocComment();
 		if ($docComment === false) {
-			return null;
+			return self::toTypescriptType("");
 		}
 
 		$doc = str_replace(["/**", "*/", "\n", "\r", "\t"], "", $docComment);
@@ -160,12 +260,12 @@ abstract class CodeGen {
 				continue;
 			}
 
-			$returnType = $parts[0];
+			$type = $parts[0];
 
-			return $returnType;
+			return self::toTypescriptType($type);
 		}
 
-		return null;
+		return self::toTypescriptType("");
 	}
 
 

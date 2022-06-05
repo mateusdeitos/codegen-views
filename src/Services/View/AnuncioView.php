@@ -4,12 +4,23 @@ namespace Services\View;
 
 class AnuncioView {
 
+	/**
+	 * @param array filtros
+	 * @return array
+	 */
 	public function listar($filtros) {
 	}
 
+	/**
+	 * @param array filtros
+	 * @return int[]|string[]
+	 */
 	public function obterIdsAnunciosListar($filtros) {
 	}
 
+	/**
+	 * @param int $id
+	 */
 	public function obter($id, $copy = false) {
 	}
 
